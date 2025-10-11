@@ -25,7 +25,7 @@ const VoiceAssistant = () => {
           const Vapi = (await import('@vapi-ai/web')).default;
           
           // Validate the public key format
-          const publicApiKey = "e1e2b696-70a7-43b5-b492-a5f4345b7975";
+          const publicApiKey = "55ebf670-7649-4cf6-b3dc-d90421220312";
           if (!publicApiKey || publicApiKey.length < 10) {
             throw new Error('Invalid Vapi api key');
           }
@@ -131,14 +131,14 @@ const VoiceAssistant = () => {
       console.log('🚀 Starting Vapi call...');
       
       //const startConfig = {
-        //assistantId: "17f068ab-b964-43e2-a7a5-486cc80f6a81"
+        //assistantId: "67540ad4-634b-4b6a-a749-d9c3c6f2a860"
         // Remove complex config for now to simplify
       //};
 
       //console.log('📋 Start config:', startConfig);
 
       //const result = await vapiRef.current.start(startConfig);
-      const result = await vapiRef.current.start("17f068ab-b964-43e2-a7a5-486cc80f6a81");
+      const result = await vapiRef.current.start("67540ad4-634b-4b6a-a749-d9c3c6f2a860");
       //console.log('✅ Call start result:', result);
 
     } catch (error) {
