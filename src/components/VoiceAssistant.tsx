@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Phone, X, Mic, MicOff, AlertCircle, ScrollText, History } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import Vapi from "@vapi-ai/web";
@@ -25,6 +26,8 @@ const VoiceAssistant = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [showTranscript, setShowTranscript] = useState(false);
   const [transcripts, setTranscripts] = useState<TranscriptMessage[]>([]);
+  const [userEmail, setUserEmail] = useState('');
+  const okrSummaryRef = useRef<string | null>(null);
 
   const vapiRef = useRef<any>(null);
   const [isVapiLoaded, setIsVapiLoaded] = useState(false);
@@ -42,7 +45,7 @@ const VoiceAssistant = () => {
           }
 
           vapiRef.current = new Vapi(publicApiKey);
-          
+
           vapiRef.current.on('call-start', () => {
             console.log('✅ Call started successfully');
             setIsCallActive(true);
@@ -53,7 +56,7 @@ const VoiceAssistant = () => {
 
           vapiRef.current.on('call-end', async () => {
             console.log('❌ Call ended');
-            
+
             // Save session before cleanup
             if (callIdRef.current && callStartedAtRef.current) {
               try {
@@ -108,18 +111,19 @@ const VoiceAssistant = () => {
 
           vapiRef.current.on('message', (message: any) => {
             console.log('💬 Message:', message);
-            
+
             // Handle transcript messages
             if (message.type === 'transcript') {
               const role = message.role === 'assistant' ? 'agent' : 'user';
               const text = message.transcript || message.text || '';
               const isFinal = message.transcriptType === 'final';
-              
+
               if (text) {
                 setTranscripts(prev => {
-                  // For partial transcripts, replace the last partial of the same role
+                  let base = prev;
+                
                   if (!isFinal) {
-                    // Find last index manually (compatible with older TS)
+                    // Replace last partial of the same role if it exists
                     let lastIndex = -1;
                     for (let i = prev.length - 1; i >= 0; i--) {
                       if (prev[i].role === role && !prev[i].isFinal) {
@@ -127,7 +131,6 @@ const VoiceAssistant = () => {
                         break;
                       }
                     }
-                    
                     if (lastIndex !== -1) {
                       const updated = [...prev];
                       updated[lastIndex] = {
@@ -138,7 +141,7 @@ const VoiceAssistant = () => {
                       return updated;
                     }
                   } else {
-                    // For final transcripts, remove the last partial and add the final
+                    // Remove the last partial of the same role, then append the final below
                     let lastPartialIndex = -1;
                     for (let i = prev.length - 1; i >= 0; i--) {
                       if (prev[i].role === role && !prev[i].isFinal) {
@@ -146,14 +149,14 @@ const VoiceAssistant = () => {
                         break;
                       }
                     }
-                    
-                    const withoutLastPartial = prev.filter((_, i) => i !== lastPartialIndex);
-                    return withoutLastPartial;
+                    if (lastPartialIndex !== -1) {
+                      base = prev.filter((_, i) => i !== lastPartialIndex);
+                    }
                   }
-                  
-                  // Add new message
+                
+                  // Append new message (partial or final)
                   return [
-                    ...prev,
+                    ...base,
                     {
                       id: `${role}-${Date.now()}-${Math.random()}`,
                       role,
@@ -165,13 +168,13 @@ const VoiceAssistant = () => {
                 });
               }
             }
-            
+
             // Handle tool calls for participant names
             if (message.type === 'tool-calls' && message.toolCalls) {
               const setParticipantsTool = message.toolCalls.find(
                 (tc: any) => tc.function?.name === 'setParticipants'
               );
-              
+
               if (setParticipantsTool?.function?.arguments) {
                 const args = setParticipantsTool.function.arguments;
                 participantsRef.current = {
@@ -204,20 +207,32 @@ const VoiceAssistant = () => {
 
   const testMicrophone = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true
-        } 
+        }
       });
-      
+
       stream.getTracks().forEach(track => track.stop());
       return true;
     } catch (error) {
       console.error('Microphone test failed:', error);
       throw error;
     }
+  };
+
+  const fetchOkrsForEmail = async (email: string) => {
+    const url = `${API_BASE_URL}/api/okr?email=${encodeURIComponent(email)}`;
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(text || 'Failed to fetch OKRs');
+    }
+    const data = await resp.json();
+    okrSummaryRef.current = data?.summary || null;
+    return data;
   };
 
   const handleConnectToTara = async () => {
@@ -230,25 +245,49 @@ const VoiceAssistant = () => {
       await testMicrophone();
       console.log('✅ Microphone permissions granted');
 
+      if (!userEmail || userEmail.indexOf('@') === -1) {
+        throw new Error('Please enter a valid email address.');
+      }
+
+      console.log('📡 Fetching OKRs for', userEmail);
+      try {
+        await fetchOkrsForEmail(userEmail);
+        console.log('✅ OKRs fetched');
+      } catch (e: any) {
+        console.warn('⚠️ Failed to fetch OKRs, continuing without summary:', e?.message);
+      }
+
       if (!vapiRef.current) {
         throw new Error('Voice assistant not initialized. Please refresh the page.');
       }
 
       console.log('🚀 Starting Vapi call...');
-      
+
       const result = await vapiRef.current.start(VAPI_CONFIG.AGENT_ID);
-      
+
       // Capture call ID
       if (result?.call?.id) {
         callIdRef.current = result.call.id;
         console.log('📞 Call ID:', callIdRef.current);
       }
 
+      // After call starts, send OKR summary as a user message to prime the AI
+      if (okrSummaryRef.current && vapiRef.current) {
+        try {
+          // Many Vapi SDKs accept plain strings for user input; fall back to known shape if needed
+          if (typeof vapiRef.current.send === 'function') {
+            await vapiRef.current.send(okrSummaryRef.current);
+          }
+        } catch (e) {
+          console.warn('Could not send OKR summary to assistant:', e);
+        }
+      }
+
     } catch (error: any) {
       console.error('❌ Error starting call:', error);
-      
+
       let userFriendlyError = 'Failed to connect. Please try again.';
-      
+
       if (error.name === 'NotAllowedError') {
         userFriendlyError = 'Microphone permission denied. Please allow microphone access in your browser settings.';
       } else if (error.name === 'NotFoundError') {
@@ -258,7 +297,7 @@ const VoiceAssistant = () => {
       } else if (error.message.includes('assistantId')) {
         userFriendlyError = 'Assistant configuration error. Please check the assistant ID.';
       }
-      
+
       setErrorMessage(userFriendlyError);
       setCallStatus('error');
       setIsAssistantOpen(true);
@@ -342,9 +381,11 @@ const VoiceAssistant = () => {
       <header className="p-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center">
-            <div className="w-16 h-10 bg-accent rounded-lg mr-3 flex items-center justify-center">
-              <span className="text-white font-bold text-xl">TS</span>
-            </div>
+            <img
+              src="/logo.png"
+              alt="Company Logo"
+              className="w-100 h-10 mr-3 object-contain"
+            />
             <h1 className="logo-text text-3xl font-bold">TalentSpotify</h1>
           </div>
           <Button
@@ -364,9 +405,11 @@ const VoiceAssistant = () => {
             <div className="mb-8 flex justify-center">
               <div className="relative">
                 <div className="w-32 h-32 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center animate-float shadow-lg">
-                  <div className="w-20 h-20 bg-accent rounded-full flex items-center justify-center">
-                    <span className="text-white font-bold text-3xl">T</span>
-                  </div>
+                  <img
+                    src="/logo.png"
+                    alt="Company Logo"
+                    className="w-20 h-20 object-contain"
+                  />
                 </div>
                 <div className="absolute inset-0 rounded-full border-2 border-accent/30 animate-ping" style={{ top: '-4px', left: '-4px', right: '-4px', bottom: '-4px' }}></div>
                 <div
@@ -382,6 +425,16 @@ const VoiceAssistant = () => {
               Your HR performance review voice assistant
             </p>
 
+            <div className="mb-4 text-left">
+              <label className="block text-sm font-medium mb-2">Email</label>
+              <Input
+                type="email"
+                placeholder="Please enter your email"
+                value={userEmail}
+                onChange={(e) => setUserEmail(e.target.value)}
+              />
+            </div>
+
             <Button
               onClick={handleConnectToTara}
               disabled={!isVapiLoaded}
@@ -393,9 +446,8 @@ const VoiceAssistant = () => {
             </Button>
 
             <div className="mt-6 flex items-center justify-center space-x-2">
-              <div className={`w-2 h-2 rounded-full animate-pulse ${
-                isVapiLoaded ? 'bg-green-500' : 'bg-yellow-500'
-              }`}></div>
+              <div className={`w-2 h-2 rounded-full animate-pulse ${isVapiLoaded ? 'bg-green-500' : 'bg-yellow-500'
+                }`}></div>
               <span className="text-sm text-muted-foreground">
                 {isVapiLoaded ? 'Voice assistant ready' : 'Initializing voice assistant...'}
               </span>
@@ -416,8 +468,8 @@ const VoiceAssistant = () => {
           handleEndCall();
         }
       }}>
-        <DialogContent 
-          className="max-w-6xl h-[80vh] p-0 border-0 bg-transparent" 
+        <DialogContent
+          className="max-w-6xl h-[80vh] p-0 border-0 bg-transparent"
           onInteractOutside={(e) => e.preventDefault()}
         >
           <div className="glass-card rounded-2xl h-full flex overflow-hidden">
@@ -426,9 +478,9 @@ const VoiceAssistant = () => {
                 <div className="flex items-center justify-between">
                   <DialogTitle className="text-xl font-semibold flex items-center">
                     <div className={`w-3 h-3 rounded-full mr-3 animate-pulse ${getStatusColor()}`}></div>
-                    {callStatus === 'connected' ? 'Connected to Tara' : 
-                     callStatus === 'connecting' ? 'Connecting...' : 
-                     callStatus === 'error' ? 'Connection Error' : 'Tara'}
+                    {callStatus === 'connected' ? 'Connected to Tara' :
+                      callStatus === 'connecting' ? 'Connecting...' :
+                        callStatus === 'error' ? 'Connection Error' : 'Tara'}
                   </DialogTitle>
                   <div className="flex items-center space-x-2">
                     {isCallActive && (
@@ -451,7 +503,7 @@ const VoiceAssistant = () => {
                         </Button>
                       </>
                     )}
-                    
+
                     <Button
                       variant="ghost"
                       size="icon"
@@ -473,24 +525,25 @@ const VoiceAssistant = () => {
                 )}
 
                 <div
-                  className={`w-48 h-48 rounded-full flex items-center justify-center mb-8 transition-all duration-300 ${
-                    callStatus === 'listening' 
-                      ? 'bg-green-100/20 shadow-lg scale-110' 
-                      : callStatus === 'assistant-speaking'
+                  className={`w-48 h-48 rounded-full flex items-center justify-center mb-8 transition-all duration-300 ${callStatus === 'listening'
+                    ? 'bg-green-100/20 shadow-lg scale-110'
+                    : callStatus === 'assistant-speaking'
                       ? 'bg-blue-100/20 shadow-lg animate-pulse'
                       : callStatus === 'error'
-                      ? 'bg-red-100/20 shadow-lg'
-                      : 'bg-white/80 backdrop-blur-sm shadow-lg'
-                  }`}
+                        ? 'bg-red-100/20 shadow-lg'
+                        : 'bg-white/80 backdrop-blur-sm shadow-lg'
+                    }`}
                 >
-                  <div className="w-32 h-32 bg-accent rounded-full flex items-center justify-center">
-                    <span className="text-white font-bold text-5xl">T</span>
-                  </div>
+                  <img
+                    src="/logo.png"
+                    alt="Company Logo"
+                    className="w-32 h-32 object-contain"
+                  />
                 </div>
-                
+
                 <div className="text-center">
                   <p className="text-2xl font-semibold mb-4">{getStatusMessage()}</p>
-                  
+
                   {(callStatus === 'listening' || callStatus === 'assistant-speaking') && (
                     <div className="flex justify-center space-x-1 mt-4">
                       {[1, 2, 3, 4, 5].map((i) => (
@@ -524,7 +577,7 @@ const VoiceAssistant = () => {
                       {isMuted ? <MicOff className="w-5 h-5 mr-2" /> : <Mic className="w-5 h-5 mr-2" />}
                       {isMuted ? 'Unmute' : 'Mute'}
                     </Button>
-                    
+
                     <Button
                       onClick={handleEndCall}
                       variant="destructive"

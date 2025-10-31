@@ -65,9 +65,11 @@ const History = () => {
             Back
           </Button>
           <div className="flex items-center">
-            <div className="w-16 h-10 bg-accent rounded-lg mr-3 flex items-center justify-center">
-              <span className="text-white font-bold text-xl">TS</span>
-            </div>
+            <img
+              src="/logo.png"
+              alt="Company Logo"
+              className="w-100 h-10 mr-3 object-contain"
+            />
             <h1 className="logo-text text-3xl font-bold">Performance Review History</h1>
           </div>
         </div>
