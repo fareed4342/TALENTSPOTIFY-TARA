@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Phone, X, Mic, MicOff, AlertCircle, ScrollText, History } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+//import { Input } from '@/components/ui/input'; //UNCOMMENT TO REDO EMAIL STUFF
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import Vapi from "@vapi-ai/web";
@@ -26,7 +26,8 @@ const VoiceAssistant = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [showTranscript, setShowTranscript] = useState(false);
   const [transcripts, setTranscripts] = useState<TranscriptMessage[]>([]);
-  const [userEmail, setUserEmail] = useState('');
+  // UNCOMMENT TO REDO EMAIL STUFF
+  //const [userEmail, setUserEmail] = useState('');
   const okrSummaryRef = useRef<string | null>(null);
 
   const vapiRef = useRef<any>(null);
@@ -222,18 +223,18 @@ const VoiceAssistant = () => {
       throw error;
     }
   };
-
-  const fetchOkrsForEmail = async (email: string) => {
-    const url = `${API_BASE_URL}/api/okr?email=${encodeURIComponent(email)}`;
-    const resp = await fetch(url);
-    if (!resp.ok) {
-      const text = await resp.text();
-      throw new Error(text || 'Failed to fetch OKRs');
-    }
-    const data = await resp.json();
-    okrSummaryRef.current = data?.summary || null;
-    return data;
-  };
+      // UNCOMMENT TO REDO EMAIL STUFF
+  // const fetchOkrsForEmail = async (email: string) => {
+  //   const url = `${API_BASE_URL}/api/okr?email=${encodeURIComponent(email)}`;
+  //   const resp = await fetch(url);
+  //   if (!resp.ok) {
+  //     const text = await resp.text();
+  //     throw new Error(text || 'Failed to fetch OKRs');
+  //   }
+  //   const data = await resp.json();
+  //   okrSummaryRef.current = data?.summary || null;
+  //   return data;
+  // };
 
   const handleConnectToTara = async () => {
     try {
@@ -244,18 +245,18 @@ const VoiceAssistant = () => {
       console.log('🎤 Testing microphone permissions...');
       await testMicrophone();
       console.log('✅ Microphone permissions granted');
+          // UNCOMMENT TO REDO EMAIL STUFF
+      // if (!userEmail || userEmail.indexOf('@') === -1) {
+      //   throw new Error('Please enter a valid email address.');
+      // }
 
-      if (!userEmail || userEmail.indexOf('@') === -1) {
-        throw new Error('Please enter a valid email address.');
-      }
-
-      console.log('📡 Fetching OKRs for', userEmail);
-      try {
-        await fetchOkrsForEmail(userEmail);
-        console.log('✅ OKRs fetched');
-      } catch (e: any) {
-        console.warn('⚠️ Failed to fetch OKRs, continuing without summary:', e?.message);
-      }
+      // console.log('📡 Fetching OKRs for', userEmail);
+      // try {
+      //   await fetchOkrsForEmail(userEmail);
+      //   console.log('✅ OKRs fetched');
+      // } catch (e: any) {
+      //   console.warn('⚠️ Failed to fetch OKRs, continuing without summary:', e?.message);
+      // }
 
       if (!vapiRef.current) {
         throw new Error('Voice assistant not initialized. Please refresh the page.');
@@ -424,8 +425,8 @@ const VoiceAssistant = () => {
             <p className="text-muted-foreground mb-8">
               Your HR performance review voice assistant
             </p>
-
-            <div className="mb-4 text-left">
+                  {/* UNCOMMENT TO REDO EMAIL STUFF */}
+            {/* <div className="mb-4 text-left">
               <label className="block text-sm font-medium mb-2">Email</label>
               <Input
                 type="email"
@@ -433,7 +434,7 @@ const VoiceAssistant = () => {
                 value={userEmail}
                 onChange={(e) => setUserEmail(e.target.value)}
               />
-            </div>
+            </div> */}
 
             <Button
               onClick={handleConnectToTara}
